@@ -1,0 +1,155 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  phone             String?
+  passwordHash      String
+  role              String   @default("CLIENT") // Enums converted to String
+  preferredLanguage String   @default("en")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  client   Client?
+  advocate Advocate?
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  name      String
+  phone     String?
+  city      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cases        Case[]
+  chatSessions ChatSession[]
+  connectionRequests ConnectionRequest[]
+  savedAdvocates SavedAdvocate[]
+}
+
+model Advocate {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  name               String
+  barRegNumber       String   @unique
+  verifiedStatus     String   @default("PENDING")
+  city               String?
+  state              String?
+  yearsExperience    Int?
+  feeRange           String?
+  practiceAreas      String   @default("[]")
+  courts             String   @default("[]")
+  languages          String   @default("[]")
+  bio                String?
+  ratingAvg          Float    @default(0.0)
+  reviewCount        Int      @default(0)
+  availabilityStatus Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matches Match[]
+  connectionRequests ConnectionRequest[]
+  savedClients SavedAdvocate[]
+}
+
+model Case {
+  id                String    @id @default(uuid())
+  clientId          String
+  caseType          String
+  jurisdiction      String
+  urgencyLevel      String
+  budgetRange       String?
+  language          String?
+  caseStage         String
+  rawTranscript     String?
+  structuredSummary String?
+  status            String    @default("OPEN")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  matches Match[]
+  connectionRequests ConnectionRequest[]
+}
+
+model ChatSession {
+  id        String   @id @default(uuid())
+  clientId  String
+  caseId    String?
+  status    String   @default("ACTIVE")
+  language  String   @default("en")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client   Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  sessionId String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id             String   @id @default(uuid())
+  caseId         String
+  advocateId     String
+  matchScore     Float
+  status         String   @default("SUGGESTED")
+  scoreBreakdown String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  case     Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  advocate Advocate @relation(fields: [advocateId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, advocateId])
+}
+
+model ConnectionRequest {
+  id               String    @id @default(uuid())
+  caseId           String
+  clientId         String
+  advocateId       String
+  status           String    @default("PENDING")
+  clientMessage    String?
+  advocateResponse String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  respondedAt      DateTime?
+
+  case     Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  advocate Advocate @relation(fields: [advocateId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, advocateId])
+}
+
+model SavedAdvocate {
+  id         String   @id @default(uuid())
+  clientId   String
+  advocateId String
+  createdAt  DateTime @default(now())
+
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  advocate   Advocate @relation(fields: [advocateId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, advocateId])
+}
