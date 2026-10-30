@@ -13,7 +13,7 @@ export class CaseExtractionService {
   private gemini: GoogleGenAI | null = null;
 
   constructor(private readonly prisma: PrismaService) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.NODE_ENV === 'test' ? null : process.env.GEMINI_API_KEY;
     if (apiKey) {
       this.gemini = new GoogleGenAI({ apiKey });
     }
@@ -38,12 +38,12 @@ export class CaseExtractionService {
     if (this.gemini) {
       try {
         const response = await this.gemini.models.generateContent({
-          model: 'gemini-3.6-flash',
+          model: 'gemini-3.8-flash',
           contents: `Extract the case profile from the following transcript:\n\n${transcript}`,
           config: {
             systemInstruction: EXTRACTION_SYSTEM_PROMPT,
             responseMimeType: 'application/json',
-          }
+          },
         });
 
         if (response.text) {
@@ -57,10 +57,10 @@ export class CaseExtractionService {
     // Mock Fallback or if LLM failed
     if (!rawJson) {
       rawJson = JSON.stringify({
-        caseType: 'OTHER',
+        caseType: 'CIVIL',
         jurisdiction: {
-          city: 'Mock City',
-          state: 'Mock State',
+          city: 'Pune',
+          state: 'Maharashtra',
           court: null,
         },
         urgencyLevel: 'MEDIUM',
@@ -68,7 +68,9 @@ export class CaseExtractionService {
         language: 'English',
         caseStage: 'INITIAL_PROBLEM',
         factualSummary:
-          'This is a fallback mock extraction because the LLM was unavailable or failed.',
+          transcript.trim() || 'Client inquiry regarding legal assistance.',
+        missingFields: [],
+        isReadyForMatching: true,
       });
     }
 

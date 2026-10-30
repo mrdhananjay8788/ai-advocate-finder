@@ -100,7 +100,24 @@ export class AdvocatesService {
       },
     });
 
-    return advocates;
+    return advocates.map((adv) => {
+      const res: any = { ...adv };
+      if (adv.practiceAreas !== undefined && adv.practiceAreas !== null) {
+        res.practiceAreas = Array.isArray(adv.practiceAreas)
+          ? adv.practiceAreas
+          : typeof adv.practiceAreas === 'string'
+          ? JSON.parse(adv.practiceAreas || '[]')
+          : adv.practiceAreas;
+      }
+      if (adv.languages !== undefined && adv.languages !== null) {
+        res.languages = Array.isArray(adv.languages)
+          ? adv.languages
+          : typeof adv.languages === 'string'
+          ? JSON.parse(adv.languages || '[]')
+          : adv.languages;
+      }
+      return res;
+    });
   }
 
   async findOne(id: string) {
@@ -128,7 +145,29 @@ export class AdvocatesService {
       throw new NotFoundException(`Advocate with ID ${id} not found`);
     }
 
-    return advocate;
+    const res: any = { ...advocate };
+    if (advocate.practiceAreas !== undefined && advocate.practiceAreas !== null) {
+      res.practiceAreas = Array.isArray(advocate.practiceAreas)
+        ? advocate.practiceAreas
+        : typeof advocate.practiceAreas === 'string'
+        ? JSON.parse(advocate.practiceAreas || '[]')
+        : advocate.practiceAreas;
+    }
+    if (advocate.courts !== undefined && advocate.courts !== null) {
+      res.courts = Array.isArray(advocate.courts)
+        ? advocate.courts
+        : typeof advocate.courts === 'string'
+        ? JSON.parse(advocate.courts || '[]')
+        : advocate.courts;
+    }
+    if (advocate.languages !== undefined && advocate.languages !== null) {
+      res.languages = Array.isArray(advocate.languages)
+        ? advocate.languages
+        : typeof advocate.languages === 'string'
+        ? JSON.parse(advocate.languages || '[]')
+        : advocate.languages;
+    }
+    return res;
   }
 
   async findByUserId(userId: string) {

@@ -26,31 +26,31 @@ export class ConnectionRequestsController {
   @Post()
   @Roles(Role.CLIENT)
   create(@Request() req: any, @Body() createDto: CreateConnectionRequestDto) {
-    return this.connectionRequestsService.create(req.user.userId, createDto);
+    return this.connectionRequestsService.create(req.user.id, createDto);
   }
 
   @Get('client/me')
   @Roles(Role.CLIENT)
   findClientRequests(@Request() req: any) {
-    return this.connectionRequestsService.findClientRequests(req.user.userId);
+    return this.connectionRequestsService.findClientRequests(req.user.id);
   }
 
   @Patch(':id/cancel')
   @Roles(Role.CLIENT)
   cancelRequest(@Request() req: any, @Param('id') id: string) {
-    return this.connectionRequestsService.cancelRequest(req.user.userId, id);
+    return this.connectionRequestsService.cancelRequest(req.user.id, id);
   }
 
   @Get('advocate/me')
   @Roles(Role.ADVOCATE)
   findAdvocateRequests(@Request() req: any) {
-    return this.connectionRequestsService.findAdvocateRequests(req.user.userId);
+    return this.connectionRequestsService.findAdvocateRequests(req.user.id);
   }
 
   @Patch(':id/accept')
   @Roles(Role.ADVOCATE)
   acceptRequest(@Request() req: any, @Param('id') id: string) {
-    return this.connectionRequestsService.acceptRequest(req.user.userId, id);
+    return this.connectionRequestsService.acceptRequest(req.user.id, id);
   }
 
   @Patch(':id/decline')
@@ -61,7 +61,7 @@ export class ConnectionRequestsController {
     @Body() declineDto: AdvocateResponseDto,
   ) {
     return this.connectionRequestsService.declineRequest(
-      req.user.userId,
+      req.user.id,
       id,
       declineDto,
     );
@@ -71,7 +71,7 @@ export class ConnectionRequestsController {
   getConnectionDetails(@Request() req: any, @Param('id') id: string) {
     // Accessible by CLIENT or ADVOCATE, verified inside the service logic
     return this.connectionRequestsService.getConnectionDetails(
-      req.user.userId,
+      req.user.id,
       id,
       req.user.role,
     );

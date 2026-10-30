@@ -64,7 +64,12 @@ export class MatchingService {
     // 6. Store match records
     const results = [];
     for (const match of topMatches) {
-      const matchRecord = await this.prisma.match.upsert({
+      const breakdownStr =
+        typeof match.scoreBreakdown === 'string'
+          ? match.scoreBreakdown
+          : JSON.stringify(match.scoreBreakdown);
+
+      await this.prisma.match.upsert({
         where: {
           caseId_advocateId: {
             caseId: caseId,
@@ -73,14 +78,14 @@ export class MatchingService {
         },
         update: {
           matchScore: match.matchScore,
-          scoreBreakdown: match.scoreBreakdown as any,
+          scoreBreakdown: breakdownStr,
           // Do not reset status if already accepted/declined, maybe in real system, but for now just update score
         },
         create: {
           caseId: caseId,
           advocateId: match.advocateId,
           matchScore: match.matchScore,
-          scoreBreakdown: match.scoreBreakdown as any,
+          scoreBreakdown: breakdownStr,
         },
       });
 
@@ -89,6 +94,30 @@ export class MatchingService {
         (a) => a.id === match.advocateId,
       );
       if (!advocateDetails) continue;
+
+      let practiceAreas: string[] = [];
+      if (Array.isArray(advocateDetails.practiceAreas)) {
+        practiceAreas = advocateDetails.practiceAreas as string[];
+      } else if (typeof advocateDetails.practiceAreas === 'string') {
+        try {
+          const parsed = JSON.parse(advocateDetails.practiceAreas || '[]');
+          practiceAreas = Array.isArray(parsed) ? parsed : [String(parsed)];
+        } catch {
+          practiceAreas = [advocateDetails.practiceAreas];
+        }
+      }
+
+      let languages: string[] = [];
+      if (Array.isArray(advocateDetails.languages)) {
+        languages = advocateDetails.languages as string[];
+      } else if (typeof advocateDetails.languages === 'string') {
+        try {
+          const parsed = JSON.parse(advocateDetails.languages || '[]');
+          languages = Array.isArray(parsed) ? parsed : [String(parsed)];
+        } catch {
+          languages = [advocateDetails.languages];
+        }
+      }
 
       results.push({
         advocateId: advocateDetails.id,
@@ -104,9 +133,9 @@ export class MatchingService {
           ? 'AVAILABLE'
           : 'UNAVAILABLE',
         scoreBreakdown: match.scoreBreakdown,
-        practiceAreas: advocateDetails.practiceAreas,
+        practiceAreas,
         feeRange: advocateDetails.feeRange,
-        languages: advocateDetails.languages,
+        languages,
       });
     }
 
@@ -150,24 +179,59 @@ export class MatchingService {
 
     return {
       caseId,
-      matches: matches.map((m) => ({
-        advocateId: m.advocate.id,
-        name: m.advocate.name,
-        matchScore: m.matchScore,
-        rating: m.advocate.ratingAvg,
-        reviewCount: m.advocate.reviewCount,
-        yearsExperience: m.advocate.yearsExperience,
-        city: m.advocate.city,
-        verified: m.advocate.verifiedStatus === VerificationStatus.VERIFIED,
-        availability: m.advocate.availabilityStatus
-          ? 'AVAILABLE'
-          : 'UNAVAILABLE',
-        scoreBreakdown: m.scoreBreakdown,
-        practiceAreas: m.advocate.practiceAreas,
-        feeRange: m.advocate.feeRange,
-        languages: m.advocate.languages,
-        matchStatus: m.status,
-      })),
+      matches: matches.map((m) => {
+        let practiceAreas: string[] = [];
+        if (Array.isArray(m.advocate.practiceAreas)) {
+          practiceAreas = m.advocate.practiceAreas as string[];
+        } else if (typeof m.advocate.practiceAreas === 'string') {
+          try {
+            const parsed = JSON.parse(m.advocate.practiceAreas || '[]');
+            practiceAreas = Array.isArray(parsed) ? parsed : [String(parsed)];
+          } catch {
+            practiceAreas = [m.advocate.practiceAreas];
+          }
+        }
+
+        let languages: string[] = [];
+        if (Array.isArray(m.advocate.languages)) {
+          languages = m.advocate.languages as string[];
+        } else if (typeof m.advocate.languages === 'string') {
+          try {
+            const parsed = JSON.parse(m.advocate.languages || '[]');
+            languages = Array.isArray(parsed) ? parsed : [String(parsed)];
+          } catch {
+            languages = [m.advocate.languages];
+          }
+        }
+
+        let scoreBreakdown: any = m.scoreBreakdown;
+        if (typeof m.scoreBreakdown === 'string') {
+          try {
+            scoreBreakdown = JSON.parse(m.scoreBreakdown);
+          } catch {
+            scoreBreakdown = m.scoreBreakdown;
+          }
+        }
+
+        return {
+          advocateId: m.advocate.id,
+          name: m.advocate.name,
+          matchScore: m.matchScore,
+          rating: m.advocate.ratingAvg,
+          reviewCount: m.advocate.reviewCount,
+          yearsExperience: m.advocate.yearsExperience,
+          city: m.advocate.city,
+          verified: m.advocate.verifiedStatus === VerificationStatus.VERIFIED,
+          availability: m.advocate.availabilityStatus
+            ? 'AVAILABLE'
+            : 'UNAVAILABLE',
+          scoreBreakdown,
+          practiceAreas,
+          feeRange: m.advocate.feeRange,
+          languages,
+          matchStatus: m.status,
+        };
+      }),
     };
   }
 

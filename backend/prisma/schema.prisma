@@ -14,11 +14,16 @@ model User {
   passwordHash      String
   role              String   @default("CLIENT") // Enums converted to String
   preferredLanguage String   @default("en")
+  isVerified        Boolean  @default(false)
+  emailVerified     Boolean  @default(false)
+  phoneVerified     Boolean  @default(false)
+  verificationMethod String? // "EMAIL" | "PHONE"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  client   Client?
-  advocate Advocate?
+  client           Client?
+  advocate         Advocate?
+  otpVerifications OtpVerification[]
 }
 
 model Client {
@@ -152,4 +157,24 @@ model SavedAdvocate {
   advocate   Advocate @relation(fields: [advocateId], references: [id], onDelete: Cascade)
 
   @@unique([clientId, advocateId])
+}
+
+model OtpVerification {
+  id                String    @id @default(uuid())
+  userId            String?
+  identifier        String    // Email or phone number
+  type              String    // "EMAIL" | "PHONE"
+  otpHash           String    // Hashed OTP (bcrypt)
+  attempts          Int       @default(0)
+  maxAttempts       Int       @default(5)
+  expiresAt         DateTime
+  resendAvailableAt DateTime
+  verifiedAt        DateTime?
+  status            String    @default("PENDING") // "PENDING" | "VERIFIED" | "EXPIRED" | "FAILED"
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([identifier, type, status])
 }

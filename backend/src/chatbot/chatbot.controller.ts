@@ -83,9 +83,20 @@ export class ChatbotController {
     const extractedProfile =
       await this.caseExtractionService.extractCaseProfile(transcript);
 
-    if (!extractedProfile.isReadyForMatching) {
+    const isReady =
+      extractedProfile.isReadyForMatching !== undefined
+        ? extractedProfile.isReadyForMatching
+        : Boolean(
+            extractedProfile.caseType &&
+              (extractedProfile.jurisdiction?.city ||
+                extractedProfile.jurisdiction?.state),
+          );
+
+    if (!isReady) {
       const missing = (extractedProfile.missingFields || []).join(', ');
-      throw new BadRequestException(`Case profile is incomplete. Please provide more information about: ${missing}`);
+      throw new BadRequestException(
+        `Case profile is incomplete. Please provide more information about: ${missing || 'case details'}`,
+      );
     }
 
     // Format jurisdiction

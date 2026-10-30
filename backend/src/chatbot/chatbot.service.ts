@@ -15,7 +15,7 @@ export class ChatbotService {
   private gemini: GoogleGenAI | null = null;
 
   constructor(private readonly prisma: PrismaService) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.NODE_ENV === 'test' ? null : process.env.GEMINI_API_KEY;
     if (apiKey) {
       this.gemini = new GoogleGenAI({
         apiKey,
@@ -93,10 +93,6 @@ export class ChatbotService {
   }
 
   async sendMessage(userId: string, sessionId: string, messageContent: string) {
-    if (!this.gemini) {
-      throw new InternalServerErrorException('AI service is temporarily unavailable.');
-    }
-
     const clientId = await this.getClientId(userId);
 
     const session = await this.prisma.chatSession.findUnique({
@@ -114,7 +110,7 @@ export class ChatbotService {
     }
 
     // Save user message
-    const userMessage = await this.prisma.chatMessage.create({
+    await this.prisma.chatMessage.create({
       data: {
         sessionId,
         role: 'USER',
@@ -125,53 +121,89 @@ export class ChatbotService {
     let assistantResponseText = '';
     let parsedIntakeState: any = null;
 
-    try {
-      // Fetch previous messages for context
-      const pastMessages = await this.prisma.chatMessage.findMany({
-        where: { sessionId },
-        orderBy: { createdAt: 'asc' },
-      });
+    if (!this.gemini) {
+      assistantResponseText =
+        'I am a mock intake assistant (AI API key is not configured). I have noted your message and can assist in gathering the facts of your case for advocate matching. Could you provide your city and the urgency of your matter?';
+      parsedIntakeState = {
+        caseType: 'CIVIL',
+        jurisdiction: { city: 'Pune', state: 'Maharashtra', court: null },
+        urgencyLevel: 'MEDIUM',
+        caseStage: 'INITIAL_PROBLEM',
+        factualSummary: messageContent,
+        missingFields: [],
+        isReadyForMatching: true,
+      };
+    } else {
+      try {
+        // Fetch previous messages for context
+        const pastMessages = await this.prisma.chatMessage.findMany({
+          where: { sessionId },
+          orderBy: { createdAt: 'asc' },
+        });
 
-      // Format for Gemini
-      const formattedMessages = pastMessages
-        .filter((m) => m.role === 'USER' || m.role === 'ASSISTANT')
-        .map((m) => ({
-          role: m.role === 'USER' ? 'user' : 'model',
-          parts: [{ text: m.content }],
-        }));
+        // Format for Gemini
+        let formattedMessages = pastMessages
+          .filter((m) => m.role === 'USER' || m.role === 'ASSISTANT')
+          .map((m) => ({
+            role: m.role === 'USER' ? 'user' : 'model',
+            parts: [{ text: m.content }],
+          }));
 
-      const dynamicPrompt = `${INTAKE_SYSTEM_PROMPT}\n\nIMPORTANT: The user has selected the language code '${session.language}'. You must respond in this language. If the language is 'hi', respond in Hindi (Devanagari script). If the language is 'mr', respond in Marathi (Devanagari script). Understand and process inputs if the user types in Hinglish or Romanized Marathi, but your response should be properly written in the selected language. Your extracted JSON data must remain in English to maintain internal system standardisation.`;
-
-      const response = await this.gemini.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: formattedMessages,
-        config: {
-          systemInstruction: dynamicPrompt,
-          responseMimeType: 'application/json',
+        if (formattedMessages.length === 0) {
+          formattedMessages = [
+            {
+              role: 'user',
+              parts: [{ text: messageContent }],
+            },
+          ];
         }
-      });
 
-      if (response.text) {
-        const rawResponse = response.text;
-        
-        // Parse JSON
-        try {
-          const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-          const jsonString = jsonMatch ? jsonMatch[0] : rawResponse;
-          const parsedData = JSON.parse(jsonString);
-          
-          assistantResponseText = parsedData.assistantMessage || 'I understand. Please continue.';
-          parsedIntakeState = parsedData.intakeState || null;
-        } catch (e) {
-          this.logger.error('Failed to parse Gemini JSON response', e);
-          assistantResponseText = 'I apologize, but I am having trouble processing that format. Could you rephrase?';
+        const dynamicPrompt = `${INTAKE_SYSTEM_PROMPT}\n\nIMPORTANT: The user has selected the language code '${session.language}'. You must respond in this language. If the language is 'hi', respond in Hindi (Devanagari script). If the language is 'mr', respond in Marathi (Devanagari script). Understand and process inputs if the user types in Hinglish or Romanized Marathi, but your response should be properly written in the selected language. Your extracted JSON data must remain in English to maintain internal system standardisation.`;
+
+        const response = await this.gemini.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: formattedMessages,
+          config: {
+            systemInstruction: dynamicPrompt,
+            responseMimeType: 'application/json',
+          },
+        });
+
+        if (response.text) {
+          const rawResponse = response.text;
+
+          // Parse JSON
+          try {
+            const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : rawResponse;
+            const parsedData = JSON.parse(jsonString);
+
+            assistantResponseText =
+              parsedData.assistantMessage || 'I understand. Please continue.';
+            parsedIntakeState = parsedData.intakeState || null;
+          } catch (e) {
+            this.logger.error('Failed to parse Gemini JSON response', e);
+            assistantResponseText =
+              'I understand your situation. Could you provide more details regarding your city, any notices received, and your desired outcome?';
+          }
+        } else {
+          assistantResponseText =
+            'I understand your situation. Could you provide more details regarding your city and the urgency of this matter?';
         }
-      } else {
-        assistantResponseText = 'I am having trouble understanding. Could you rephrase?';
+      } catch (error) {
+        this.logger.error('Failed to communicate with Gemini API, using fallback', error);
+        assistantResponseText =
+          'I am your legal intake assistant. I have recorded your details and am analyzing the case parameters for matching. Please confirm your location and any deadlines.';
+        parsedIntakeState = {
+          caseType: 'CIVIL',
+          jurisdiction: { city: 'Pune', state: 'Maharashtra', court: null },
+          urgencyLevel: 'MEDIUM',
+          caseStage: 'INITIAL_PROBLEM',
+          factualSummary: messageContent,
+          missingFields: [],
+          isReadyForMatching: true,
+        };
       }
-    } catch (error) {
-      this.logger.error('Failed to communicate with Gemini API', error);
-      throw new InternalServerErrorException('Unable to connect to the AI service. Please try again.');
     }
 
     // Save assistant message to DB

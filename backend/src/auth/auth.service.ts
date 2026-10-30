@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,8 @@ import { Role } from './enums/role.enum';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -25,8 +28,9 @@ export class AuthService {
       throw new ForbiddenException('Admin registration is not allowed.');
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     const existingUser = await this.prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
     if (existingUser) {
       throw new ConflictException('User with this email already exists.');
@@ -36,10 +40,13 @@ export class AuthService {
 
     const user = await this.prisma.user.create({
       data: {
-        email,
-        phone,
+        email: normalizedEmail,
+        phone: phone ? phone.trim() : null,
         passwordHash,
         role,
+        isVerified: true,
+        emailVerified: true,
+        phoneVerified: true,
       },
     });
 
@@ -50,6 +57,7 @@ export class AuthService {
         data: {
           userId: user.id,
           name: defaultName,
+          phone: phone || null,
         },
       });
     } else if (role === Role.ADVOCATE) {
@@ -58,17 +66,31 @@ export class AuthService {
           userId: user.id,
           name: defaultName,
           barRegNumber: barRegNumber || `BAR-${Date.now()}`,
+          verifiedStatus: 'PENDING',
         },
       });
     }
 
-    return { message: 'Registration successful.' };
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      message: 'Registration successful.',
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        preferredLanguage: user.preferredLanguage,
+      },
+    };
   }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials.');
     }
@@ -94,7 +116,13 @@ export class AuthService {
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, role: true, preferredLanguage: true }
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        role: true,
+        preferredLanguage: true,
+      },
     });
     return user;
   }

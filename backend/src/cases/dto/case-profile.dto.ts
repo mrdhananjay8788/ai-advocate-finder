@@ -47,6 +47,10 @@ export class CaseProfileDto {
   factualSummary?: string | null;
 
   @IsOptional()
+  @IsString()
+  summary?: string | null;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   missingFields?: string[];

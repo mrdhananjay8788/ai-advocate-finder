@@ -8,6 +8,7 @@ export interface ScoreBreakdown {
   experience: number;
   budget: number;
   availability: number;
+  rating?: number;
 }
 
 export interface MatchResult {
@@ -51,12 +52,20 @@ export class AdvocateScoringService {
         experience,
         budget,
         availability,
+        rating: advocate.ratingAvg ? Math.round(advocate.ratingAvg * 2) : 0,
       },
     };
   }
 
-  private normalizeString(str?: string | null): string {
+  private normalizeString(str?: any): string {
     if (!str) return '';
+    if (typeof str !== 'string') {
+      if (Array.isArray(str)) {
+        str = str.join(' ');
+      } else {
+        str = String(str);
+      }
+    }
     // Lowercase and remove basic punctuation and extra whitespace
     return str
       .toLowerCase()
@@ -71,28 +80,37 @@ export class AdvocateScoringService {
    */
   private scoreSpecialization(caseData: Case, advocate: Advocate): number {
     const caseTypeMapping: Record<string, string[]> = {
-      property: ['property law', 'civil law', 'real estate'],
-      criminal: ['criminal law'],
-      family: ['family law', 'divorce'],
-      corporate: ['corporate law', 'business law'],
-      cybercrime: ['cyber law', 'criminal law'],
-      consumer: ['consumer law'],
-      labour: ['labour law', 'employment law'],
-      civil: ['civil law'],
+      property: ['property', 'property law', 'civil', 'civil law', 'real estate'],
+      criminal: ['criminal', 'criminal law'],
+      family: ['family', 'family law', 'divorce'],
+      corporate: ['corporate', 'corporate law', 'business', 'business law'],
+      cybercrime: ['cybercrime', 'cyber law', 'cyber', 'criminal law'],
+      consumer: ['consumer', 'consumer law'],
+      labour: ['labour', 'labour law', 'employment', 'employment law'],
+      civil: ['civil', 'civil law'],
     };
 
     const caseTypeStr = this.normalizeString(caseData.caseType).replace(/\s+/g, '_');
     const mappedAreas = caseTypeMapping[caseTypeStr] || [caseTypeStr]; // Fallback to raw string
 
-    // Advocate practice areas are stored as JSON string `["Property Law", ...]`
+    // Advocate practice areas may be stored as JSON string `["Property Law", ...]` or already an Array
     let advAreas: string[] = [];
-    try {
-      advAreas = JSON.parse(advocate.practiceAreas || '[]');
-    } catch {
-      advAreas = [advocate.practiceAreas];
+    if (Array.isArray(advocate.practiceAreas)) {
+      advAreas = advocate.practiceAreas as string[];
+    } else if (typeof advocate.practiceAreas === 'string') {
+      try {
+        const parsed = JSON.parse(advocate.practiceAreas || '[]');
+        advAreas = Array.isArray(parsed) ? parsed : [String(parsed)];
+      } catch {
+        advAreas = [advocate.practiceAreas];
+      }
     }
 
-    const normalizedAdvAreas = advAreas.map(a => this.normalizeString(a));
+    const normalizedAdvAreas = advAreas.map((a) => this.normalizeString(a));
+
+    if (normalizedAdvAreas.includes(caseTypeStr)) {
+      return 40;
+    }
 
     for (const mappedArea of mappedAreas) {
       if (normalizedAdvAreas.includes(this.normalizeString(mappedArea))) {
@@ -102,7 +120,7 @@ export class AdvocateScoringService {
 
     // Partial match on substring
     for (const area of normalizedAdvAreas) {
-      if (mappedAreas.some(m => m.includes(area) || area.includes(m))) {
+      if (mappedAreas.some((m) => m.includes(area) || area.includes(m))) {
         return 20; // Partial score
       }
     }
@@ -181,12 +199,17 @@ export class AdvocateScoringService {
    */
   private scoreLanguage(caseData: Case, advocate: Advocate): number {
     const caseLang = this.normalizeString(caseData.language);
-    
+
     let advLangs: string[] = [];
-    try {
-      advLangs = JSON.parse(advocate.languages || '[]');
-    } catch {
-      advLangs = [advocate.languages];
+    if (Array.isArray(advocate.languages)) {
+      advLangs = advocate.languages as string[];
+    } else if (typeof advocate.languages === 'string') {
+      try {
+        const parsed = JSON.parse(advocate.languages || '[]');
+        advLangs = Array.isArray(parsed) ? parsed : [String(parsed)];
+      } catch {
+        advLangs = [advocate.languages];
+      }
     }
 
     if (!caseLang || !advLangs || advLangs.length === 0) {
@@ -194,7 +217,8 @@ export class AdvocateScoringService {
     }
 
     for (const lang of advLangs) {
-      if (this.normalizeString(lang).includes(caseLang) || caseLang.includes(this.normalizeString(lang))) {
+      const normLang = this.normalizeString(lang);
+      if (normLang && (normLang.includes(caseLang) || caseLang.includes(normLang))) {
         return 10;
       }
     }

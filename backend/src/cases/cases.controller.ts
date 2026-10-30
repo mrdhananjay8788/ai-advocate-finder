@@ -73,6 +73,8 @@ export class CasesController {
           .join(', ') || 'Unknown';
     }
 
+    const summaryText = profileDto.summary || profileDto.factualSummary || null;
+
     const updateData: any = {
       caseType: profileDto.caseType,
       jurisdiction: jurisdictionStr,
@@ -80,9 +82,16 @@ export class CasesController {
       budgetRange: profileDto.budgetRange,
       language: profileDto.language,
       caseStage: profileDto.caseStage,
-      structuredSummary: JSON.stringify(profileDto),
+      structuredSummary: JSON.stringify({
+        ...profileDto,
+        factualSummary: summaryText,
+      }),
       status: 'INTAKE_COMPLETED', // Mark completed when they confirm
     };
+
+    if (summaryText) {
+      updateData.rawTranscript = summaryText;
+    }
 
     return this.casesService.update(req.user.id, id, updateData);
   }

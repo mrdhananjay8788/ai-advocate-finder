@@ -5,6 +5,7 @@ import {
   MinLength,
   IsEnum,
   IsOptional,
+  IsIn,
 } from 'class-validator';
 import { Role } from '../enums/role.enum';
 
@@ -33,4 +34,9 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   barRegNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['EMAIL', 'PHONE'])
+  verificationMethod?: 'EMAIL' | 'PHONE';
 }
